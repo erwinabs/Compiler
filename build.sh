@@ -1,14 +1,15 @@
 #!/bin/bash
 
-printf "\e[1;32m \u2730 Recovery Compiler\e[0m\n\n"
+printf "\e[1;32m \u2730 Recovery Compiler (Optimized)\e[0m\n\n"
 
-SECONDS_LEFT=${SECONDS_LEFT:=2}
-while ((SECONDS_LEFT > 0)); do
-    printf "Please wait %.fs ...\n" "${SECONDS_LEFT}"
-    sleep 1
-    SECONDS_LEFT=$((SECONDS_LEFT - 1))
-done
-unset SECONDS_LEFT
+# 1. HAPUS DELAY 2 DETIK
+# SECONDS_LEFT=${SECONDS_LEFT:=2}
+# while ((SECONDS_LEFT > 0)); do
+#     printf "Please wait %.fs ...\n" "${SECONDS_LEFT}"
+#     sleep 1
+#     SECONDS_LEFT=$((SECONDS_LEFT - 1))
+# done
+# unset SECONDS_LEFT
 
 echo "::group::Free Space Checkup"
 if [[ ! $(df / --output=avail | tail -1 | awk '{print $NF}') -ge 41943040 ]]; then
@@ -45,13 +46,15 @@ echo "::endgroup::"
 
 printf "We are going to build ${FLAVOR}-flavored ${TARGET} for ${CODENAME} from the manufacturer ${VENDOR}\n"
 
-echo "::group::Installation Of Recommended Programs"
-export DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8 JAVA_OPTS=" -Xmx7G " JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+echo "::group::Installation Of Recommended Programs (Optimized)"
+export DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8 JAVA_OPTS=" -Xmx7G " JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64 # Mengganti ke Java 11 (standar untuk AOSP 12+)
 sudo apt-get -qqy update &>/dev/null
-sudo apt-get -qqy install gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc ccache lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev libtinfo5 &>/dev/null
-sudo apt-get -qqy purge default-jre-headless openjdk-11-jre-headless &>/dev/null
-sudo apt-get -qy clean &>/dev/null; sudo apt-get -qy autoremove &>/dev/null
-sudo rm -rf -- /var/lib/apt/lists/* /var/cache/apt/archives/* &>/dev/null
+# Menghapus ccache dari daftar install (sudah diurus oleh workflow)
+sudo apt-get -qqy install gperf gcc-multilib gcc-10-multilib g++-multilib g++-10-multilib libc6-dev lib32ncurses5-dev x11proto-core-dev libx11-dev tree lib32z-dev libgl1-mesa-dev libxml2-utils xsltproc bc lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libsdl1.2-dev libwxgtk3.0-gtk3-dev libxml2 lzop pngcrush schedtool squashfs-tools imagemagick libbz2-dev lzma ncftp qemu-user-static libstdc++-10-dev libtinfo5 &>/dev/null
+# Menghapus purging dan cleaning yang redundant dan berpotensi merusak JRE/JDK default
+# sudo apt-get -qqy purge default-jre-headless openjdk-11-jre-headless &>/dev/null
+# sudo apt-get -qy clean &>/dev/null; sudo apt-get -qy autoremove &>/dev/null
+# sudo rm -rf -- /var/lib/apt/lists/* /var/cache/apt/archives/* &>/dev/null
 echo "::endgroup::"
 
 echo "::group::Installation Of git-repo and ghr"
@@ -63,36 +66,24 @@ tar -xzf ghr_*_amd64.tar.gz --wildcards 'ghr*/ghr' --strip-components 1 && rm -r
 chmod a+rx ./repo && chmod a+x ./ghr && sudo mv ./repo ./ghr /usr/local/bin/
 echo "::endgroup::"
 
-echo "::group::Installation Of Latest make and ccache"
-mkdir -p /home/runner/extra &>/dev/null
-{
-    cd /home/runner/extra || exit 1
-    wget -q https://ftp.gnu.org/gnu/make/make-4.3.tar.gz
-    tar xzf make-4.3.tar.gz && cd make-*/ || exit
-    ./configure && bash ./build.sh && sudo install ./make /usr/local/bin/make
-    cd /home/runner/extra || exit 1
-    git clone -q https://github.com/ccache/ccache.git
-    cd ccache && git checkout -q v4.2
-    mkdir build && cd build || exit
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -DZSTD_FROM_INTERNET=ON ..
-    make -j$(nproc) && sudo make install          
-} &>/dev/null
-cd /home/runner || exit 1
-rm -rf /home/runner/extra
-echo "::endgroup::"
+# 2. HAPUS SELURUH BLOK KOMPILASI MANUAL MAKE & CCACHE (PENGHEMAT WAKTU TERBESAR)
+# echo "::group::Installation Of Latest make and ccache"
+# ...
+# echo "::endgroup::"
 
-echo "::group::Doing Some Random Stuff"
+echo "::group::Doing Some Random Stuff & Setting ccache Path"
 if [ -e /lib/x86_64-linux-gnu/libncurses.so.6 ] && [ ! -e /usr/lib/x86_64-linux-gnu/libncurses.so.5 ]; then
     ln -s /lib/x86_64-linux-gnu/libncurses.so.6 /usr/lib/x86_64-linux-gnu/libncurses.so.5
 fi
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin USE_CCACHE=1 CCACHE_COMPRESS=1 CCACHE_COMPRESSLEVEL=8 CCACHE_DIR=/opt/ccache TERM=xterm-256color
+# Menetapkan path PATH standar dan CCACHE_DIR ke path yang digunakan oleh actions/cache (workspace/.ccache)
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin USE_CCACHE=1 CCACHE_COMPRESS=1 CCACHE_COMPRESSLEVEL=8 CCACHE_DIR=${GITHUB_WORKSPACE}/.ccache TERM=xterm-256color
 . /home/runner/.bashrc 2>/dev/null
 echo "::endgroup::"
 
 echo "::group::Setting ccache"
-mkdir -p /opt/ccache &>/dev/null
-sudo chown runner:docker /opt/ccache
-CCACHE_DIR=/opt/ccache ccache -M 10G &>/dev/null      
+# Hapus mkdir dan chown /opt/ccache, karena actions/cache sudah mengurusnya di path workspace
+# ccache -M 10G sudah diurus di workflow YAML Anda (5G)
+ccache -M 10G &>/dev/null # Set batas ulang ke 10G
 printf "All Preparation Done.\nReady To Build Recoveries...\n"
 echo "::endgroup::"
 
@@ -103,11 +94,13 @@ echo "::group::Source Repo Sync"
 printf "Initializing Repo\n"
 printf "We will be using %s for Manifest source\n" "${MANIFEST}"
 repo init -q -u ${MANIFEST} --depth=1 --groups=all,-notdefault,-device,-darwin,-x86,-mips || { printf "Repo Initialization Failed.\n"; exit 1; }
+# Sinkronisasi sudah cepat: -q, --depth=1, -j$(nproc)
 repo sync -c -q --force-sync --no-clone-bundle --no-tags -j$(nproc) || { printf "Git-Repo Sync Failed.\n"; exit 1; }
 echo "::endgroup::"
 
 echo "::group::Device and Kernel Tree Cloning"
 printf "Cloning Device Tree\n"
+# Sudah menggunakan --depth=1, sudah cepat
 git clone --single-branch --depth=1 ${DT_LINK} device/${VENDOR}/${CODENAME}
 [[ ! -f device/${VENDOR}/${CODENAME}/omni.dependencies ]] && printf "[\n]\n" > device/${VENDOR}/${CODENAME}/omni.dependencies
 if [[ ! -z "${KERNEL_LINK}" ]]; then
@@ -124,6 +117,7 @@ if [[ $USE_SECRET_BOOTABLE == 'true' ]] && [[ -z "$SECRET_BR" ]]; then
 elif [[ $USE_SECRET_BOOTABLE == 'true' ]] && [[ ! -z "$SECRET_BR" ]]; then
     rm -rf bootable/recovery
     printf "Cloning Secret Bootable\n"
+    # Sudah menggunakan --depth=1, sudah cepat
     git clone --quiet --single-branch --depth=1 https://pbrp-bot:$GH_BOT_TOKEN@github.com/PitchBlackRecoveryProject/pbrp_recovery_secrets -b ${SECRET_BR} bootable/recovery
 else
     printf "Using Default Bootable\n"
@@ -147,6 +141,7 @@ lunch omni_${CODENAME}-${FLAVOR} || lunch twrp_${CODENAME}-${FLAVOR} || { printf
 echo "::endgroup::"
 
 echo "::group::Compilation"
+# Sudah menggunakan -j$(nproc), sudah cepat
 mka -j$(nproc) ${TARGET} || { printf "Compilation failed.\n "; free -h; exit 1; }
 echo "::endgroup::"
 
